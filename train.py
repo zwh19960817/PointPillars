@@ -201,13 +201,13 @@ if __name__ == '__main__':
     parser.add_argument('--data_root', default='/mnt/ssd1/lifa_rdata/det/kitti', 
                         help='your data root for kitti')
     parser.add_argument('--saved_path', default='pillar_logs')
-    parser.add_argument('--batch_size', type=int, default=6)
-    parser.add_argument('--num_workers', type=int, default=4)
+    parser.add_argument('--batch_size', type=int, default=2)
+    parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--nclasses', type=int, default=3)
     parser.add_argument('--init_lr', type=float, default=0.00025)
     parser.add_argument('--max_epoch', type=int, default=160)
     parser.add_argument('--log_freq', type=int, default=8)
-    parser.add_argument('--ckpt_freq_epoch', type=int, default=20)
+    parser.add_argument('--ckpt_freq_epoch', type=int, default=2)
     parser.add_argument('--no_cuda', action='store_true',
                         help='whether to use cuda')
     args = parser.parse_args()

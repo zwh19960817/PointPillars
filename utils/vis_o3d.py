@@ -56,7 +56,7 @@ def vis_core(plys):
     param = o3d.io.read_pinhole_camera_parameters(os.path.join(PAR, 'viewpoint.json'))
     for ply in plys:
         vis.add_geometry(ply)
-    ctr.convert_from_pinhole_camera_parameters(param)
+    ctr.convert_from_pinhole_camera_parameters(param,True)#用于解决投影失败问题https://github.com/isl-org/Open3D/issues/1164
 
     vis.run()
     # param = vis.get_view_control().convert_to_pinhole_camera_parameters()
