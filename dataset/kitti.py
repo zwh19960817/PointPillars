@@ -52,7 +52,7 @@ class Kitti(Dataset):
         db_infos = self.filter_db(db_infos)
 
         db_sampler = {}
-        for cat_name in self.CLASSES:
+        for cat_name in self.CLASSES:#根据目标类别分类数据集，记录数据的索引
             db_sampler[cat_name] = BaseSampler(db_infos[cat_name], shuffle=True)
         self.data_aug_config=dict(
             db_sampler=dict(

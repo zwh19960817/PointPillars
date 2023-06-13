@@ -27,6 +27,7 @@ class PillarLayer(nn.Module):
         '''
         pillars, coors, npoints_per_pillar = [], [], []
         for i, pts in enumerate(batched_pts):
+            # 输入点云[n,c],输出 [有效pillar [p,m,c], 有效pillar在map中的坐标[p,3], 有效pillar实际点数[p,](实际数量<=m)]
             voxels_out, coors_out, num_points_per_voxel_out = self.voxel_layer(pts) 
             # voxels_out: (max_voxel, num_points, c), coors_out: (max_voxel, 3)
             # num_points_per_voxel_out: (max_voxel, )
@@ -34,10 +35,10 @@ class PillarLayer(nn.Module):
             coors.append(coors_out.long())
             npoints_per_pillar.append(num_points_per_voxel_out)
         
-        pillars = torch.cat(pillars, dim=0) # (p1 + p2 + ... + pb, num_points, c)
+        pillars = torch.cat(pillars, dim=0) # (p1 + p2 + ... + pb, num_points, c) 合并batch,为什么???
         npoints_per_pillar = torch.cat(npoints_per_pillar, dim=0) # (p1 + p2 + ... + pb, )
         coors_batch = []
-        for i, cur_coors in enumerate(coors):
+        for i, cur_coors in enumerate(coors):#这一步把batch的id,记在了pillar坐标的第0维
             coors_batch.append(F.pad(cur_coors, (1, 0), value=i))
         coors_batch = torch.cat(coors_batch, dim=0) # (p1 + p2 + ... + pb, 1 + 3)
 
@@ -79,14 +80,14 @@ class PillarEncoder(nn.Module):
         # In consitent with mmdet3d. 
         # The reason can be referenced to https://github.com/open-mmlab/mmdetection3d/issues/1150
 
-        # 4. find mask for (0, 0, 0) and update the encoded features
+        # 4. find mask for (0, 0, 0) and update the encoded features  就是只保留每个pillar中有点的，无点的用0补充
         # a very beautiful implementation
         voxel_ids = torch.arange(0, pillars.size(1)).to(device) # (num_points, )
         mask = voxel_ids[:, None] < npoints_per_pillar[None, :] # (num_points, p1 + p2 + ... + pb)
         mask = mask.permute(1, 0).contiguous()  # (p1 + p2 + ... + pb, num_points)
         features *= mask[:, :, None]
 
-        # 5. embedding
+        # 5. embedding  所谓pointnet pillar数作为了batch维度，所以可变
         features = features.permute(0, 2, 1).contiguous() # (p1 + p2 + ... + pb, 9, num_points)
         features = F.relu(self.bn(self.conv(features)))  # (p1 + p2 + ... + pb, out_channels, num_points)
         pooling_features = torch.max(features, dim=-1)[0] # (p1 + p2 + ... + pb, out_channels)
@@ -96,14 +97,14 @@ class PillarEncoder(nn.Module):
         bs = coors_batch[-1, 0] + 1
         for i in range(bs):
             cur_coors_idx = coors_batch[:, 0] == i
-            cur_coors = coors_batch[cur_coors_idx, :]
-            cur_features = pooling_features[cur_coors_idx]
+            cur_coors = coors_batch[cur_coors_idx, :]#取出i号batch的pillar坐标
+            cur_features = pooling_features[cur_coors_idx]#取出i号batch的pillar特征
 
             canvas = torch.zeros((self.x_l, self.y_l, self.out_channel), dtype=torch.float32, device=device)
-            canvas[cur_coors[:, 1], cur_coors[:, 2]] = cur_features
+            canvas[cur_coors[:, 1], cur_coors[:, 2]] = cur_features#按照索引在map中存pillar特征
             canvas = canvas.permute(2, 1, 0).contiguous()
             batched_canvas.append(canvas)
-        batched_canvas = torch.stack(batched_canvas, dim=0) # (bs, in_channel, self.y_l, self.x_l)
+        batched_canvas = torch.stack(batched_canvas, dim=0) # (bs, in_channel, self.y_l, self.x_l) #append是list，合并batch
         return batched_canvas
 
 
@@ -224,6 +225,13 @@ class PointPillars(nn.Module):
                  point_cloud_range=[0, -39.68, -3, 69.12, 39.68, 1],
                  max_num_points=32,
                  max_voxels=(16000, 40000)):
+        '''
+        类别
+        栅格分辨率
+        点云范围
+        每个pillar最多点数
+         选择 P (训练集中最多16000, 测试集中最多40000)个Pillars
+        '''
         super().__init__()
         self.nclasses = nclasses
         self.pillar_layer = PillarLayer(voxel_size=voxel_size, 
@@ -375,7 +383,7 @@ class PointPillars(nn.Module):
     def forward(self, batched_pts, mode='test', batched_gt_bboxes=None, batched_gt_labels=None):
         batch_size = len(batched_pts)
         # batched_pts: list[tensor] -> pillars: (p1 + p2 + ... + pb, num_points, c), 
-        #                              coors_batch: (p1 + p2 + ... + pb, 1 + 3), 
+        #                              coors_batch: (p1 + p2 + ... + pb, 1 + 3),   通道1为batch_id
         #                              num_points_per_pillar: (p1 + p2 + ... + pb, ), (b: batch size)
         pillars, coors_batch, npoints_per_pillar = self.pillar_layer(batched_pts)
 

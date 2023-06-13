@@ -47,14 +47,14 @@ class _Voxelization(torch.autograd.Function):
         """
         
         voxels = points.new_zeros(
-            size=(max_voxels, max_points, points.size(1)))
-        coors = points.new_zeros(size=(max_voxels, 3), dtype=torch.int)
+            size=(max_voxels, max_points, points.size(1))) #存放有效pillar<tensor>.new_zeros()创建与原tensor 相同类型，相同device的tensor
+        coors = points.new_zeros(size=(max_voxels, 3), dtype=torch.int) #存放有效pillar在map中的位置
         num_points_per_voxel = points.new_zeros(
-            size=(max_voxels, ), dtype=torch.int)
+            size=(max_voxels, ), dtype=torch.int) #存放有效pillar的点数
         voxel_num = hard_voxelize(points, voxels, coors,
                                     num_points_per_voxel, voxel_size,
                                     coors_range, max_points, max_voxels, 3,
-                                    deterministic)
+                                    deterministic)#返回有效pillar的数据，我猜此时训练返回不会大于16000
         # select the valid voxels
         voxels_out = voxels[:voxel_num]
         coors_out = coors[:voxel_num].flip(-1) # (z, y, x) -> (x, y, z)
@@ -113,7 +113,7 @@ class Voxelization(nn.Module):
         """
         input: shape=(N, c)
         """
-        if self.training:
+        if self.training:#训练集中最多16000, 测试集中最多40000
             max_voxels = self.max_voxels[0]
         else:
             max_voxels = self.max_voxels[1]

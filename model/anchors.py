@@ -17,16 +17,18 @@ class Anchors():
         anchor_range: [x1, y1, z1, x2, y2, z2]
         anchor_size: [w, l, h]
         rotations: [0, 1.57]
-        return: shape=(y_l, x_l, 2, 7)
+        return: shape=(y_l, x_l, 2, 7)  y方向第y_l个 x方向第x_l个 某朝向 的anchor有7个信息 (中心xyz，长宽高，朝向)
         '''
         device = feature_map_size.device
+        # grid的边角位置   [n,m] -> [n,n+1,n+2,,,m]
         x_centers = torch.linspace(anchor_range[0], anchor_range[3], feature_map_size[1] + 1, device=device)
         y_centers = torch.linspace(anchor_range[1], anchor_range[4], feature_map_size[0] + 1, device=device)
         z_centers = torch.linspace(anchor_range[2], anchor_range[5], 1 + 1, device=device)
-
+        # grid的边长的一半
         x_shift = (x_centers[1] - x_centers[0]) / 2
         y_shift = (y_centers[1] - y_centers[0]) / 2
         z_shift = (z_centers[1] - z_centers[0]) / 2
+        # grid的中心位置
         x_centers = x_centers[:feature_map_size[1]] + x_shift # (feature_map_size[1], )
         y_centers = y_centers[:feature_map_size[0]] + y_shift # (feature_map_size[0], )
         z_centers = z_centers[:1] + z_shift  # (1, )
@@ -35,12 +37,12 @@ class Anchors():
         meshgrids = torch.meshgrid(x_centers, y_centers, z_centers, rotations)
         meshgrids = list(meshgrids)
         for i in range(len(meshgrids)):
-            meshgrids[i] = meshgrids[i][..., None] # [feature_map_size[1], feature_map_size[0], 1, 2, 1]
+            meshgrids[i] = meshgrids[i][..., None] # [feature_map_size[1], feature_map_size[0], 1, 2, 1] 尾部再加一维
         
         anchor_size = anchor_size[None, None, None, None, :]
         repeat_shape = [feature_map_size[1], feature_map_size[0], 1, len(rotations), 1]
         anchor_size = anchor_size.repeat(repeat_shape) # [feature_map_size[1], feature_map_size[0], 1, 2, 3]
-        meshgrids.insert(3, anchor_size)
+        meshgrids.insert(3, anchor_size)# 横坐标216单位，纵坐标248单位，z方向1个单位，朝向2个单位，尺寸3个单位
         anchors = torch.cat(meshgrids, dim=-1).permute(2, 1, 0, 3, 4).contiguous() # [1, feature_map_size[0], feature_map_size[1], 2, 7]
         return anchors.squeeze(0)
 
@@ -59,6 +61,7 @@ class Anchors():
         rotations = torch.tensor(self.rotations, device=device)
         multi_anchors = []
         for i in range(len(ranges)):
+            # 不同的范围内，生成不同尺度的anchor  [x:248,y:216,z/scale(不同高度存放不同尺度，本代码1和2高度相同):3,yaw:2,info:7]
             anchors = self.get_anchors(feature_map_size=feature_map_size, 
                                        anchor_range=ranges[i], 
                                        anchor_size=sizes[i], 
