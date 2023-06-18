@@ -123,3 +123,6 @@ python test.py --ckpt pretrained/epoch_160.pth --pc_path /home/lifa/data/KITTI/t
 ## Acknowledements
 
 Thanks for the open souce code [mmcv](https://github.com/open-mmlab/mmcv), [mmdet](https://github.com/open-mmlab/mmdetection) and [mmdet3d](https://github.com/open-mmlab/mmdetection3d).
+
+参考:
+https://zhuanlan.zhihu.com/p/521277176

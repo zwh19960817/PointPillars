@@ -39,7 +39,8 @@ def main(args):
 
     if not args.no_cuda:
         model = PointPillars(nclasses=len(CLASSES)).cuda()
-        model.load_state_dict(torch.load(args.ckpt))
+        checkpoint = torch.load(args.ckpt)
+        model.load_state_dict(checkpoint)
     else:
         model = PointPillars(nclasses=len(CLASSES))
         model.load_state_dict(
@@ -48,7 +49,10 @@ def main(args):
     if not os.path.exists(args.pc_path):
         raise FileNotFoundError 
     pc = read_points(args.pc_path)
-    pc = point_range_filter(pc)
+    pc = point_range_filter(pc[::1,])
+    # pc[:, 0] = pc[:,0]  + 10.8
+    # pc[:, 1] = pc[:,1]  + 2.8
+    # pc[:, 2] = pc[:,2]  -0.8
     pc_torch = torch.from_numpy(pc)
     if os.path.exists(args.calib_path):
         calib_info = read_calib(args.calib_path)

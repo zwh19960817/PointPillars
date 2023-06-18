@@ -241,7 +241,7 @@ int hard_voxelize_gpu(const at::Tensor& points, at::Tensor& voxels,
   at::cuda::CUDAGuard device_guard(points.device());
 
   const int num_points = points.size(0);
-  const int num_features = points.size(1);
+  const int num_features = points.size(1);// x ,y, z, intensity
 
   const float voxel_x = voxel_size[0];
   const float voxel_y = voxel_size[1];

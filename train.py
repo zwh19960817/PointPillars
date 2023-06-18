@@ -62,10 +62,18 @@ def main(args):
     saved_ckpt_path = os.path.join(args.saved_path, 'checkpoints')
     os.makedirs(saved_ckpt_path, exist_ok=True)
 
+    # 加载模型的预训练参数
+    if os.path.exists(args.pretrained):
+        print("=> loading model '{}'".format(args.pretrained))
+        checkpoint = torch.load(args.pretrained)
+        pointpillars.load_state_dict(checkpoint)
+
+
     for epoch in range(args.max_epoch):
         print('=' * 20, epoch, '=' * 20)
         train_step, val_step = 0, 0
         for i, data_dict in enumerate(tqdm(train_dataloader)):
+
             if not args.no_cuda:
                 # move the tensors to the cuda
                 for key in data_dict:
@@ -201,6 +209,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_root', default='/mnt/ssd1/lifa_rdata/det/kitti', 
                         help='your data root for kitti')
     parser.add_argument('--saved_path', default='pillar_logs')
+    parser.add_argument('--pretrained', default='/home/zwh/work_space/deep/PointPillars/pretrained/epoch_160.pth')#预训练参数路径
     parser.add_argument('--batch_size', type=int, default=2)
     parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--nclasses', type=int, default=3)

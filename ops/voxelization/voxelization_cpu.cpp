@@ -21,13 +21,13 @@ void dynamic_voxelize_kernel(const torch::TensorAccessor<T, 2> points,
   for (int i = 0; i < num_points; ++i) {
     failed = false;
     for (int j = 0; j < NDim; ++j) {
-      c = floor((points[i][j] - coors_range[j]) / voxel_size[j]);
+      c = floor((points[i][j] - coors_range[j]) / voxel_size[j]);//计算点到栅格的索引
       // necessary to rm points out of range
       if ((c < 0 || c >= grid_size[j])) {
         failed = true;
         break;
       }
-      coor[ndim_minus_1 - j] = c;
+      coor[ndim_minus_1 - j] = c;//反着存放？？？ zyx
     }
 
     for (int k = 0; k < NDim; ++k) {
