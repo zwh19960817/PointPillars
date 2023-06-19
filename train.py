@@ -36,7 +36,7 @@ def main(args):
                                     shuffle=False)
 
     if not args.no_cuda:
-        pointpillars = PointPillars(nclasses=args.nclasses).cuda()
+        pointpillars = PointPillars(nclasses=args.nclasses, use_intensity=args.use_intensity).cuda()
     else:
         pointpillars = PointPillars(nclasses=args.nclasses)
     loss_func = Loss()
@@ -142,7 +142,7 @@ def main(args):
         if (epoch + 1) % args.ckpt_freq_epoch == 0:
             torch.save(pointpillars.state_dict(), os.path.join(saved_ckpt_path, f'epoch_{epoch+1}.pth'))
 
-        if epoch % 2 == 0:
+        if epoch % 5 == 0:
             continue
         pointpillars.eval()
         with torch.no_grad():
@@ -209,7 +209,8 @@ if __name__ == '__main__':
     parser.add_argument('--data_root', default='/mnt/ssd1/lifa_rdata/det/kitti', 
                         help='your data root for kitti')
     parser.add_argument('--saved_path', default='pillar_logs')
-    parser.add_argument('--pretrained', default='/home/zwh/work_space/deep/PointPillars/pretrained/epoch_160.pth')#预训练参数路径
+    parser.add_argument('--pretrained', default='')#预训练参数路径
+    parser.add_argument('--use_intensity', type=bool, default=False)
     parser.add_argument('--batch_size', type=int, default=2)
     parser.add_argument('--num_workers', type=int, default=2)
     parser.add_argument('--nclasses', type=int, default=3)

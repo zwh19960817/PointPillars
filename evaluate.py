@@ -287,7 +287,7 @@ def main(args):
     LABEL2CLASSES = {v:k for k, v in CLASSES.items()}
 
     if not args.no_cuda:
-        model = PointPillars(nclasses=args.nclasses).cuda()
+        model = PointPillars(nclasses=args.nclasses, use_intensity=args.use_intensity).cuda()
         model.load_state_dict(torch.load(args.ckpt))
     else:
         model = PointPillars(nclasses=args.nclasses)
@@ -375,6 +375,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_root', default='/mnt/ssd1/lifa_rdata/det/kitti', 
                         help='your data root for kitti')
     parser.add_argument('--ckpt', default='pretrained/epoch_160.pth', help='your checkpoint for kitti')
+    parser.add_argument('--use_intensity', type=bool, default=False)
     parser.add_argument('--saved_path', default='results', help='your saved path for predicted results')
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--num_workers', type=int, default=4)

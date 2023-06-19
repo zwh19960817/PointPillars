@@ -52,7 +52,6 @@ def main(args):
     pc = point_range_filter(pc[::1,])
     # pc[:, 0] = pc[:,0]  + 10.8
     # pc[:, 1] = pc[:,1]  + 2.8
-    # pc[:, 2] = pc[:,2]  -0.8
     pc_torch = torch.from_numpy(pc)
     if os.path.exists(args.calib_path):
         calib_info = read_calib(args.calib_path)

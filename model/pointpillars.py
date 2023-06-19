@@ -28,13 +28,13 @@ class PillarLayer(nn.Module):
         pillars, coors, npoints_per_pillar = [], [], []
         for i, pts in enumerate(batched_pts):
             # 输入点云[n,c],输出 [有效pillar [p,m,c], 有效pillar在map中的坐标[p,3], 有效pillar实际点数[p,](实际数量<=m)]
-            voxels_out, coors_out, num_points_per_voxel_out = self.voxel_layer(pts) 
+            voxels_out, coors_out, num_points_per_voxel_out = self.voxel_layer(pts)
             # voxels_out: (max_voxel, num_points, c), coors_out: (max_voxel, 3)
             # num_points_per_voxel_out: (max_voxel, )
             pillars.append(voxels_out)
             coors.append(coors_out.long())
             npoints_per_pillar.append(num_points_per_voxel_out)
-        
+
         pillars = torch.cat(pillars, dim=0) # (p1 + p2 + ... + pb, num_points, c) 合并batch,为什么???
         npoints_per_pillar = torch.cat(npoints_per_pillar, dim=0) # (p1 + p2 + ... + pb, )
         coors_batch = []
@@ -48,6 +48,7 @@ class PillarLayer(nn.Module):
 class PillarEncoder(nn.Module):
     def __init__(self, voxel_size, point_cloud_range, in_channel, out_channel):
         super().__init__()
+        self.in_channel = in_channel
         self.out_channel = out_channel
         self.vx, self.vy = voxel_size[0], voxel_size[1]
         self.x_offset = voxel_size[0] / 2 + point_cloud_range[0]
@@ -74,7 +75,13 @@ class PillarEncoder(nn.Module):
         y_offset_pi_center = pillars[:, :, 1:2] - (coors_batch[:, None, 2:3] * self.vy + self.y_offset) # (p1 + p2 + ... + pb, num_points, 1)
 
         # 3. encoder
-        features = torch.cat([pillars, offset_pt_center, x_offset_pi_center, y_offset_pi_center], dim=-1) # (p1 + p2 + ... + pb, num_points, 9)
+        if self.in_channel==9:
+            features = torch.cat([pillars, offset_pt_center, x_offset_pi_center, y_offset_pi_center], dim=-1) # (p1 + p2 + ... + pb, num_points, 9)
+        elif self.in_channel==8:
+            features = torch.cat([pillars[:,:,:3], offset_pt_center, x_offset_pi_center, y_offset_pi_center], dim=-1) # (p1 + p2 + ... + pb, num_points, 9)
+        else:
+            exit("self.in_channel应该等于8或者9")
+
         features[:, :, 0:1] = x_offset_pi_center # tmp
         features[:, :, 1:2] = y_offset_pi_center # tmp
         # In consitent with mmdet3d. 
@@ -113,7 +120,7 @@ class Backbone(nn.Module):
         super().__init__()
         assert len(out_channels) == len(layer_nums)
         assert len(out_channels) == len(layer_strides)
-        
+
         self.multi_blocks = nn.ModuleList()
         for i in range(len(layer_strides)):
             blocks = []
@@ -155,16 +162,16 @@ class Neck(nn.Module):
         self.decoder_blocks = nn.ModuleList()
         for i in range(len(in_channels)):
             decoder_block = []
-            decoder_block.append(nn.ConvTranspose2d(in_channels[i], 
-                                                    out_channels[i], 
-                                                    upsample_strides[i], 
+            decoder_block.append(nn.ConvTranspose2d(in_channels[i],
+                                                    out_channels[i],
+                                                    upsample_strides[i],
                                                     stride=upsample_strides[i],
                                                     bias=False))
             decoder_block.append(nn.BatchNorm2d(out_channels[i], eps=1e-3, momentum=0.01))
             decoder_block.append(nn.ReLU(inplace=True))
 
             self.decoder_blocks.append(nn.Sequential(*decoder_block))
-        
+
         # in consitent with mmdet3d
         for m in self.modules():
             if isinstance(m, nn.ConvTranspose2d):
@@ -186,7 +193,7 @@ class Neck(nn.Module):
 class Head(nn.Module):
     def __init__(self, in_channel, n_anchors, n_classes):
         super().__init__()
-        
+
         self.conv_cls = nn.Conv2d(in_channel, n_anchors*n_classes, 1)
         self.conv_reg = nn.Conv2d(in_channel, n_anchors*7, 1)
         self.conv_dir_cls = nn.Conv2d(in_channel, n_anchors*2, 1)
@@ -220,46 +227,48 @@ class Head(nn.Module):
 
 class PointPillars(nn.Module):
     def __init__(self,
-                 nclasses=3, 
+                 nclasses=3,
                  voxel_size=[0.16, 0.16, 4],
                  point_cloud_range=[0, -39.68, -3, 69.12, 39.68, 1],
                  max_num_points=32,
-                 max_voxels=(16000, 40000)):
+                 max_voxels=(16000, 40000),
+                 use_intensity=False):
         '''
         类别
         栅格分辨率
         点云范围
         每个pillar最多点数
          选择 P (训练集中最多16000, 测试集中最多40000)个Pillars
+        是否使用强度信息
         '''
         super().__init__()
         self.nclasses = nclasses
-        self.pillar_layer = PillarLayer(voxel_size=voxel_size, 
-                                        point_cloud_range=point_cloud_range, 
-                                        max_num_points=max_num_points, 
+        self.pillar_layer = PillarLayer(voxel_size=voxel_size,
+                                        point_cloud_range=point_cloud_range,
+                                        max_num_points=max_num_points,
                                         max_voxels=max_voxels)
-        self.pillar_encoder = PillarEncoder(voxel_size=voxel_size, 
-                                            point_cloud_range=point_cloud_range, 
-                                            in_channel=9, 
+        self.pillar_encoder = PillarEncoder(voxel_size=voxel_size,
+                                            point_cloud_range=point_cloud_range,
+                                            in_channel= 9 if use_intensity else 8,
                                             out_channel=64)
-        self.backbone = Backbone(in_channel=64, 
-                                 out_channels=[64, 128, 256], 
+        self.backbone = Backbone(in_channel=64,
+                                 out_channels=[64, 128, 256],
                                  layer_nums=[3, 5, 5])
-        self.neck = Neck(in_channels=[64, 128, 256], 
-                         upsample_strides=[1, 2, 4], 
+        self.neck = Neck(in_channels=[64, 128, 256],
+                         upsample_strides=[1, 2, 4],
                          out_channels=[128, 128, 128])
         self.head = Head(in_channel=384, n_anchors=2*nclasses, n_classes=nclasses)
-        
+
         # anchors
         ranges = [[0, -39.68, -0.6, 69.12, 39.68, -0.6],
                     [0, -39.68, -0.6, 69.12, 39.68, -0.6],
                     [0, -39.68, -1.78, 69.12, 39.68, -1.78]]
         sizes = [[0.6, 0.8, 1.73], [0.6, 1.76, 1.73], [1.6, 3.9, 1.56]]
         rotations=[0, 1.57]
-        self.anchors_generator = Anchors(ranges=ranges, 
-                                         sizes=sizes, 
+        self.anchors_generator = Anchors(ranges=ranges,
+                                         sizes=sizes,
                                          rotations=rotations)
-        
+
         # train
         self.assigners = [
             {'pos_iou_thr': 0.5, 'neg_iou_thr': 0.35, 'min_iou_thr': 0.35},
@@ -289,7 +298,7 @@ class PointPillars(nn.Module):
         bbox_pred = bbox_pred.permute(1, 2, 0).reshape(-1, 7)
         bbox_dir_cls_pred = bbox_dir_cls_pred.permute(1, 2, 0).reshape(-1, 2)
         anchors = anchors.reshape(-1, 7)
-        
+
         bbox_cls_pred = torch.sigmoid(bbox_cls_pred)
         bbox_dir_cls_pred = torch.max(bbox_dir_cls_pred, dim=1)[1]
 
@@ -322,12 +331,12 @@ class PointPillars(nn.Module):
             cur_bbox_pred2d = bbox_pred2d[score_inds]
             cur_bbox_pred = bbox_pred[score_inds]
             cur_bbox_dir_cls_pred = bbox_dir_cls_pred[score_inds]
-            
+
             # 3.2 nms core
-            keep_inds = nms_cuda(boxes=cur_bbox_pred2d, 
-                                 scores=cur_bbox_cls_pred, 
-                                 thresh=self.nms_thr, 
-                                 pre_maxsize=None, 
+            keep_inds = nms_cuda(boxes=cur_bbox_pred2d,
+                                 scores=cur_bbox_cls_pred,
+                                 thresh=self.nms_thr,
+                                 pre_maxsize=None,
                                  post_max_size=None)
 
             cur_bbox_cls_pred = cur_bbox_cls_pred[keep_inds]
@@ -374,8 +383,8 @@ class PointPillars(nn.Module):
         bs = bbox_cls_pred.size(0)
         for i in range(bs):
             result = self.get_predicted_bboxes_single(bbox_cls_pred=bbox_cls_pred[i],
-                                                      bbox_pred=bbox_pred[i], 
-                                                      bbox_dir_cls_pred=bbox_dir_cls_pred[i], 
+                                                      bbox_pred=bbox_pred[i],
+                                                      bbox_dir_cls_pred=bbox_dir_cls_pred[i],
                                                       anchors=batched_anchors[i])
             results.append(result)
         return results
@@ -411,25 +420,25 @@ class PointPillars(nn.Module):
         batched_anchors = [anchors for _ in range(batch_size)]
 
         if mode == 'train':
-            anchor_target_dict = anchor_target(batched_anchors=batched_anchors, 
-                                               batched_gt_bboxes=batched_gt_bboxes, 
-                                               batched_gt_labels=batched_gt_labels, 
+            anchor_target_dict = anchor_target(batched_anchors=batched_anchors,
+                                               batched_gt_bboxes=batched_gt_bboxes,
+                                               batched_gt_labels=batched_gt_labels,
                                                assigners=self.assigners,
                                                nclasses=self.nclasses)
-            
+
             return bbox_cls_pred, bbox_pred, bbox_dir_cls_pred, anchor_target_dict
         elif mode == 'val':
-            results = self.get_predicted_bboxes(bbox_cls_pred=bbox_cls_pred, 
-                                                bbox_pred=bbox_pred, 
-                                                bbox_dir_cls_pred=bbox_dir_cls_pred, 
+            results = self.get_predicted_bboxes(bbox_cls_pred=bbox_cls_pred,
+                                                bbox_pred=bbox_pred,
+                                                bbox_dir_cls_pred=bbox_dir_cls_pred,
                                                 batched_anchors=batched_anchors)
             return results
 
         elif mode == 'test':
-            results = self.get_predicted_bboxes(bbox_cls_pred=bbox_cls_pred, 
-                                                bbox_pred=bbox_pred, 
-                                                bbox_dir_cls_pred=bbox_dir_cls_pred, 
+            results = self.get_predicted_bboxes(bbox_cls_pred=bbox_cls_pred,
+                                                bbox_pred=bbox_pred,
+                                                bbox_dir_cls_pred=bbox_dir_cls_pred,
                                                 batched_anchors=batched_anchors)
             return results
         else:
-            raise ValueError   
+            raise ValueError
